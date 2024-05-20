@@ -1,7 +1,7 @@
-import scipy
-from pyformlang.cfg import Variable, Epsilon
-from typing import Tuple
+from pyformlang.cfg import Terminal
 from scipy.sparse import csr_matrix
+from copy import deepcopy
+
 from project.task06 import cfg_to_weak_normal_form
 
 
@@ -10,33 +10,52 @@ def cfpq_with_matrix(
     graph,
     start_nodes: set[int] = None,
     final_nodes: set[int] = None,
-) -> set[Tuple[int, int]]:
+) -> set[tuple[int, int]]:
+    start_nodes = graph.nodes if start_nodes is None else start_nodes
+    final_nodes = graph.nodes if final_nodes is None else final_nodes
 
     cfg = cfg_to_weak_normal_form(cfg)
     n = len(graph.nodes)
-    products = {var: csr_matrix((n, n), dtype=bool) for var in cfg.variables}
+    products = {p.head.value: csr_matrix((n, n), dtype=bool) for p in cfg.productions}
+    accumulate = deepcopy(products)
 
-    P_mult = set()
+    P_epsilon = set()
+    P_terminal = {}
+    P_mult = {}
 
-    for i, j, tag in graph.edges.data("label"):
-        for p in cfg.productions:
-            if len(p.body) == 1:
-                if isinstance(p.body[0], Variable) and p.body[0].value == tag:
-                    products[p.head][i, j] = True
-                elif isinstance(p.body[0], Epsilon):
-                    products[p.head] += csr_matrix(scipy.eye(n), dtype=bool)
-            elif len(p.body) == 2:
-                P_mult.add((p.head, p.body[0], p.body[1]))
+    for p in cfg.productions:
+        if len(p.body) == 0:
+            P_epsilon.add(p.head.value)
+        elif len(p.body) == 1 and isinstance(p.body[0], Terminal):
+            P_terminal.setdefault(p.body[0].value, set()).add(p.head.value)
+        elif len(p.body) == 2:
+            P_mult.setdefault(p.head.value, set()).add(
+                (p.body[0].value, p.body[1].value)
+            )
 
-    r = {i: v for i, v in enumerate(graph.nodes)}
-    products = {Np: csr_matrix(m) for (Np, m) in products.items()}
+    for n, m, tag in graph.edges.data("label"):
+        if tag in P_terminal:
+            for N in P_terminal[tag]:
+                products[N][n, m] = True
+
+    for N in P_epsilon:
+        products[N].setdiag(True)
 
     new = True
     while new:
         new = False
-        for Np, M, N in P_mult:
-            prev = products[Np].nnz
-            products[Np] += products[M] @ products[N]
-            new |= prev != products[Np].nnz
+        for N, mult in P_mult.items():
+            prev = accumulate[N].nnz
+            for L, R in mult:
+                accumulate[N] += products[L] @ products[R]
+            new |= prev != accumulate[N].nnz
+        if new:
+            for N, m in accumulate.items():
+                products[N] += m
 
-    return {(r[m], r[n]) for _, M in products.items() for m, n in zip(*M.nonzero())}
+    start = cfg.start_symbol.value
+    return {
+        (n, m)
+        for n, m in zip(*products[start].nonzero())
+        if n in start_nodes and m in final_nodes
+    }
