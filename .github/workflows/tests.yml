@@ -46,6 +46,10 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip list
 
+      # ANTLR Generation
+      - name: ANTLR Generation
+        run: antlr4 -Dlanguage=Python3 -Xexact-output-dir project/task11/notgraphql.g4 -o project/task11/notgraphql
+
       # Running all the tests in "tests" directory
       - name: Run all tests
         run: |
