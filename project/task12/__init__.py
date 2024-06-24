@@ -1,3 +1,3 @@
-from project.task12.type_checker import TypeCheckVisitor
+from project.task12.main import typing_program
 
-__all__ = [TypeCheckVisitor]
+__all__ = [typing_program]
