@@ -25,7 +25,7 @@ regexp:
         | regexp '.' regexp
         | regexp '&' regexp;
 
-range: '[' NUM '..' NUM? ']';
+range: '[' NUM ('..' (NUM)?)? ']';
 select: v_filter? v_filter? 'return' VAR (',' VAR)? 'where' VAR 'reachable'
         'from' VAR 'in' VAR 'by' expr;
 

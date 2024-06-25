@@ -3,6 +3,7 @@ from pyformlang.finite_automaton import (
     DeterministicFiniteAutomaton,
     NondeterministicFiniteAutomaton,
 )
+from pyformlang.regular_expression import Regex
 from scipy.sparse import csr_matrix, kron
 
 from project.task02 import graph_to_nfa, regex_to_dfa
@@ -34,6 +35,10 @@ class FiniteAutomaton:
     def is_empty(self) -> bool:
         nfa = FiniteAutomaton.__to_nfa(self)
         return nfa.is_empty()
+
+    def to_regex(self) -> Regex:
+        nfa = FiniteAutomaton.__to_nfa(self)
+        return nfa.to_regex()
 
     def size(self):
         return len(self.state_map)

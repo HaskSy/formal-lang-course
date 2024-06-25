@@ -18,7 +18,7 @@ from helper import generate_rnd_start_and_final, generate_rnd_dense_graph
 from constants import LABELS
 
 try:
-    from project.task7 import cfpq_with_matrix
+    from project.task07 import cfpq_with_matrix
     from project.task12 import typing_program, exec_program
 except ImportError:
     pytestmark = pytest.mark.skip("Task 12 is not ready to test!")
