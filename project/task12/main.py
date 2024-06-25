@@ -33,5 +33,14 @@ def exec_program(program: str) -> dict[str, set[tuple]]:
     visitor = TypeCheckVisitor()
     context: TypeContext = visitor.visit(tree)
 
-    interpreterVisitor = InterpreterVisitor(context)
-    return interpreterVisitor.visit(tree)
+    interpreter_visitor = InterpreterVisitor(context)
+    return interpreter_visitor.visit(tree)
+
+
+if __name__ == "__main__":
+    program = """
+let s2 = s14 . s2 . s23 | s2 . s2 | "a"^[0 .. 0]
+let s23 = "d" | "b"
+let s14 = "a" | "c"
+    """
+    exec_program(program)

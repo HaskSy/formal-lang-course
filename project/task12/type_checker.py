@@ -15,6 +15,7 @@ class Type(Enum):
     EDGE = "edge"
     GRAPH = "graph"
     RANGE = "range"
+    REGEX = "regex"
 
 
 def typecheck(expected: Type, actual: Type, message=str | None) -> None:
