@@ -14,6 +14,7 @@ class Type(Enum):
     SET_INT_PAIR = "set<int*int>"
     EDGE = "edge"
     GRAPH = "graph"
+    RANGE = "range"
 
 
 def typecheck(expected: Type, actual: Type, message=str | None) -> None:
@@ -35,7 +36,7 @@ def typecheck_any(expected: list[Type], actual: Type, message=str | None) -> Non
         raise Exception(message)
 
 
-class Context:
+class TypeContext:
     def __init__(self):
         self.bindings = {}
         self.temp_bindings = set()  # storage of potential RSM variables not yet defined
@@ -45,10 +46,13 @@ class Context:
             typecheck(
                 Type.RSM,
                 typ,
-                f"Variable {var} is expected to be '{Type.RSM.value}', but declared as {typ.value}",
+                f"Variable {var} is expected to be '{Type.RSM.value}', but defined as {typ.value}",
             )
             self.temp_bindings.remove(var)
-        self.bindings[var] = typ
+        if typ == Type.CHAR:
+            self.bindings[var] = Type.FA
+        else:
+            self.bindings[var] = typ
 
     def lookup(self, var):
         if var in self.bindings:
@@ -65,12 +69,13 @@ class Context:
 
 class TypeCheckVisitor(notgraphqlVisitor):
     def __init__(self):
-        self.context = Context()
+        self.context = TypeContext()
 
-    def visitProg(self, ctx):
+    def visitProg(self, ctx) -> TypeContext:
         for stmt in ctx.stmt():
             self.visit(stmt)
-        return Type.VOID
+        self.context.check_if_complete()
+        return self.context
 
     def visitDeclare(self, ctx):
         var = ctx.VAR().getText()
@@ -152,7 +157,9 @@ class TypeCheckVisitor(notgraphqlVisitor):
             if ctx.CHAR():
                 return Type.FA  # Неявно оборачиваем в Symbol
             elif ctx.VAR():
-                return self.context.lookup(ctx.VAR().getText())
+                var = self.context.lookup(ctx.VAR().getText())
+                typecheck_any([Type.FA, Type.RSM], var)
+                return Type.FA if var == Type.CHAR else var
         elif ctx.getChildCount() == 3 and ctx.range_():
             op = ctx.getChild(1).getText()
             left = self.visit(ctx.regexp(0))
@@ -209,9 +216,8 @@ class TypeCheckVisitor(notgraphqlVisitor):
                 raise Exception("Unknown operation between regexps")
 
         elif ctx.getChildCount() == 3 and ctx.regexp(0):
-            lb = ctx.getChild(0).getText()
-            rb = ctx.getChild(2).getText()
-            assert lb == "(" and rb == ")"
+            assert ctx.getChild(0).getText() == "(" and ctx.getChild(2).getText() == ")", \
+                "Код, который делает мМmмММ?!"
             return self.visit(ctx.regexp(0))
 
         raise Exception("Unknown regular expression type")
@@ -219,7 +225,7 @@ class TypeCheckVisitor(notgraphqlVisitor):
     def visitRange(self, ctx):
         # Так как синтаксис гарантирует, что на вход нам будут приходить только
         # Численные литералы, без переменных, то проверка на типы тут не нужна
-        return Type.VOID
+        return Type.RANGE
 
     def visitSelect(self, ctx):
         # Было бы логично анализ на матч переменных вынести в отдельный visitor

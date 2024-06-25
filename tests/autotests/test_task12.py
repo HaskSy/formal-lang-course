@@ -19,7 +19,7 @@ from constants import LABELS
 
 try:
     from project.task07 import cfpq_with_matrix
-    from project.task12 import typing_program
+    from project.task12 import typing_program, exec_program
 except ImportError:
     pytestmark = pytest.mark.skip("Task 12 is not ready to test!")
 
