@@ -33,9 +33,9 @@ def type_assertion(t: Type, o: AnyType) -> bool:
             return isinstance(o, Int)
         case Type.INT_PAIR:
             return (
-                    isinstance(o, tuple) and
-                    len(o) == 2 and
-                    all(isinstance(item, int) for item in o)
+                isinstance(o, tuple)
+                and len(o) == 2
+                and all(isinstance(item, int) for item in o)
             )
         case Type.CHAR:
             return isinstance(o, Char)
@@ -44,43 +44,53 @@ def type_assertion(t: Type, o: AnyType) -> bool:
         case Type.RSM:
             return isinstance(o, RSM)
         case Type.SET_INT:
-            return (
-                    isinstance(o, set) and
-                    all(isinstance(item, Int) for item in o)
-            )
+            return isinstance(o, set) and all(isinstance(item, Int) for item in o)
         case Type.SET_INT_PAIR:
-            return (
-                    isinstance(o, set) and
-                    all(
-                        isinstance(o, tuple) and
-                        len(o) == 2 and
-                        all(isinstance(i, Int) for i in item) for item in o
-                    )
+            return isinstance(o, set) and all(
+                isinstance(o, tuple)
+                and len(o) == 2
+                and all(isinstance(i, Int) for i in item)
+                for item in o
             )
         case Type.EDGE:
-            return (isinstance(o, tuple) and
-                    len(o) == 3 and
-                    isinstance(o[0], Int) and
-                    isinstance(o[1], Int) and
-                    isinstance(o[2], Char)
-                    )
+            return (
+                isinstance(o, tuple)
+                and len(o) == 3
+                and isinstance(o[0], Int)
+                and isinstance(o[1], Int)
+                and isinstance(o[2], Char)
+            )
         case Type.GRAPH:
             return isinstance(o, MultiDiGraph)
         case Type.RANGE:
-            return isinstance(o, tuple) and \
-            (len(o) == 1 and isinstance(o[0], Int)) and \
-            (len(o) == 2 and isinstance(o[0], Int) and isinstance(o[1], Int | None))
+            return (
+                isinstance(o, tuple)
+                and (len(o) == 1 and isinstance(o[0], Int))
+                and (
+                    len(o) == 2
+                    and isinstance(o[0], Int)
+                    and isinstance(o[1], Int | None)
+                )
+            )
         case _:
-           return False
+            return False
 
 
-def make_fa(o: Char) -> FA:
-    return FA(regex_to_dfa(o))
+def cast(o: AnyType, t: Type) -> AnyType:
+    if type_assertion(t, o):
+        return o
+    if type_assertion(Type.CHAR, o) and t == Type.FA:
+        return FA(regex_to_dfa(o))
+    if type_assertion(Type.FA, o) and t == Type.RSM:
+        return RSM.from_regex(o.to_regex(), Symbol("S"))
+    if type_assertion(Type.RSM, o) and t == Type.FA:
+        return FA(rsm_to_mat(o)[0])
+    raise Exception(f"Cast from {type(o)} to {t} is not defined")
 
 
 def rsm_repeat(a: FA | RSM, b: Range) -> FA | RSM:
-    isFA: bool = isinstance(a, FA)
-    fa1: Regex = FA(rsm_to_mat(a)[0]).to_regex() if isinstance(a, RSM) else a
+    isFA: bool = type_assertion(Type.FA, a)
+    fa1: Regex = cast(a, Type.FA).to_regex()
     step: Regex = deepcopy(fa1)
 
     for _ in range(0, b[0] - 1):
@@ -95,44 +105,46 @@ def rsm_repeat(a: FA | RSM, b: Range) -> FA | RSM:
                 fa1 = fa1.union(step)
                 result = result.union(fa1)
 
-    rec: RSM = RecursiveAutomaton.from_regex(result, Symbol("S"))
-    return FA(rsm_to_mat(rec)[0]) if isFA else rec
+    rec: RSM = RSM.from_regex(result, Symbol("S"))
+    return cast(rec, Type.FA) if isFA else rec
 
 
-
-def rsm_union(
-        a: FA | RSM, b: FA | RSM
-) -> FA | RSM:
-    isFA: bool = isinstance(a, FA) and isinstance(b, FA)
-    fa1: Regex = FA(rsm_to_mat(a)[0]).to_regex() if isinstance(a, RSM) else a
-    fa2: Regex = FA(rsm_to_mat(b)[0]).to_regex() if isinstance(b, RSM) else b
-    rec: RSM = RecursiveAutomaton.from_regex(fa1.union(fa2), Symbol("S"))
-    return FA(rsm_to_mat(rec)[0]) if isFA else rec
+def rsm_union(a: FA | RSM, b: FA | RSM) -> FA | RSM:
+    isFA: bool = type_assertion(Type.FA, a) and type_assertion(Type.FA, b)
+    fa1: Regex = cast(a, Type.FA).to_regex()
+    fa2: Regex = cast(b, Type.FA).to_regex()
+    rec: RSM = RSM.from_regex(fa1.union(fa2), Symbol("S"))
+    return cast(rec, Type.FA) if isFA else rec
 
 
-def rsm_concat(
-    a: FA | RSM, b: FA | RSM
-) -> FA | RSM:
-    isFA: bool = isinstance(a, FA) and isinstance(b, FA)
-    fa1: Regex = FA(rsm_to_mat(a)[0]).to_regex() if isinstance(a, RSM) else a
-    fa2: Regex = FA(rsm_to_mat(b)[0]).to_regex() if isinstance(b, RSM) else b
-    rec: RSM = RecursiveAutomaton.from_regex(fa1.concatenate(fa2), Symbol("S"))
-    return FA(rsm_to_mat(rec)[0]) if isFA else rec
+def rsm_concat(a: FA | RSM, b: FA | RSM) -> FA | RSM:
+    isFA: bool = type_assertion(Type.FA, a) and type_assertion(Type.FA, b)
+    fa1: Regex = cast(a, Type.FA).to_regex()
+    fa2: Regex = cast(b, Type.FA).to_regex()
+    rec: RSM = RSM.from_regex(fa1.concatenate(fa2), Symbol("S"))
+    return cast(rec, Type.FA) if isFA else rec
 
 
 def rsm_intersect(a: FA | RSM, b: FA | RSM) -> RSM:
-    fa1: FA = FA(rsm_to_mat(a)[0]) if isinstance(a, RSM) else a
-    fa2: FA = FA(rsm_to_mat(b)[0]) if isinstance(b, RSM) else b
-    intersection = intersect_automata(fa1, fa2)
-    return RecursiveAutomaton.from_regex(intersection.to_regex(), Symbol("S"))
+    fa1: FA = cast(a, Type.FA)
+    fa2: FA = cast(b, Type.FA)
+    intersection: FA = intersect_automata(fa1, fa2)
+    return RSM.from_regex(intersection.to_regex(), Symbol("S"))
 
 
 class Context:
     def __init__(self):
         self.bindings = {}
+        self.temp_bindings = set()
 
     def bind(self, var: str, t: AnyType):
-        self.bindings[var] = t
+        if var in self.temp_bindings:
+            self.bindings[var] = cast(t, Type.RSM)
+            self.temp_bindings.remove(var)
+        if type_assertion(Type.CHAR, t):
+            self.bindings[var] = cast(t, Type.FA)
+        else:
+            self.bindings[var] = t
 
     def lookup(self, var):
         # После type-checking это должно быть гарантией, если это не так, ошибка в тайп чекере
@@ -149,8 +161,11 @@ class InterpreterVisitor(notgraphqlVisitor):
     def __get_subset(self):
         return dict(
             filter(
-                lambda k: self.tc[k[0]] == Type.SET_INT_PAIR or self.tc[k[0]] == Type.SET_INT,
-            self.context.bindings.items()))
+                lambda k: self.tc[k[0]] == Type.SET_INT_PAIR
+                or self.tc[k[0]] == Type.SET_INT,
+                self.context.bindings.items(),
+            )
+        )
 
     def visitProg(self, ctx):
         for stmt in ctx.stmt():
@@ -224,7 +239,7 @@ class InterpreterVisitor(notgraphqlVisitor):
     def visitRegexp(self, ctx) -> FA | RSM:
         if ctx.getChildCount() == 1:
             if ctx.CHAR():
-                return make_fa(ctx.CHAR().getText())
+                return cast(ctx.CHAR().getText(), Type.FA)
             elif ctx.VAR():
                 var = self.context.lookup(ctx.VAR().getText())
                 assert type_assertion(self.tc.lookup(ctx.VAR().getText()), var)
@@ -251,7 +266,7 @@ class InterpreterVisitor(notgraphqlVisitor):
 
     def visitRange(self, ctx) -> Range:
         n1: Int = self.visit(ctx.NUM(0))
-        if ctx.getChild(2) != '..':
+        if ctx.getChild(2) != "..":
             return tuple(n1)
         n2: Int = self.visit(ctx.NUM(1)) if ctx.NUM(1) else None
         if n2 is not None and n2 < n1:
@@ -286,10 +301,14 @@ class InterpreterVisitor(notgraphqlVisitor):
                 final_nodes = self.visit(vf2)
 
         q: FA | RSM = self.visit(ctx.expr())
-        g: Graph = self.visit(ctx.VAR()[-1])
+        g: Graph = self.context.lookup(var_to_text(ctx.VAR()[-1]))
 
         args = (q, g, start_nodes, final_nodes)
-        res: SetIntPair = cfpq_with_tensor(*args) if isinstance(q, RSM) else cfpq_with_matrix(*args)
+        res: SetIntPair = (
+            cfpq_with_tensor(*args)
+            if type_assertion(Type.RSM, q)
+            else cfpq_with_matrix(*args)
+        )
         match len(ctx.VAR()):
             case 5:
                 return res

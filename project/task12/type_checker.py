@@ -43,16 +43,25 @@ class TypeContext:
 
     def bind(self, var, typ):
         if var in self.temp_bindings:
-            typecheck(
-                Type.RSM,
-                typ,
-                f"Variable {var} is expected to be '{Type.RSM.value}', but defined as {typ.value}",
-            )
+            if typ != Type.CHAR:
+                typecheck_any(
+                    [Type.RSM, Type.FA],
+                    typ,
+                    f"Variable {var} is expected to be '{Type.RSM.value}', but defined as {typ.value}",
+                )
+            self.bindings[var] = Type.RSM
             self.temp_bindings.remove(var)
         if typ == Type.CHAR:
             self.bindings[var] = Type.FA
         else:
             self.bindings[var] = typ
+
+    def has_type(self, var, typ):
+        if var in self.temp_bindings:
+            return typ == Type.RSM
+        if var in self.bindings:
+            return self.bindings[var] == typ
+        return False
 
     def lookup(self, var):
         if var in self.bindings:
@@ -70,6 +79,10 @@ class TypeContext:
 class TypeCheckVisitor(notgraphqlVisitor):
     def __init__(self):
         self.context = TypeContext()
+
+    @staticmethod
+    def __var_to_text(var):
+        return var.symbol.text
 
     def visitProg(self, ctx) -> TypeContext:
         for stmt in ctx.stmt():
@@ -155,11 +168,12 @@ class TypeCheckVisitor(notgraphqlVisitor):
     def visitRegexp(self, ctx):
         if ctx.getChildCount() == 1:
             if ctx.CHAR():
-                return Type.FA  # Неявно оборачиваем в Symbol
+                # Неявно оборачиваем в Symbol
+                return Type.FA
             elif ctx.VAR():
                 var = self.context.lookup(ctx.VAR().getText())
                 typecheck_any([Type.FA, Type.RSM], var)
-                return Type.FA if var == Type.CHAR else var
+                return var
         elif ctx.getChildCount() == 3 and ctx.range_():
             op = ctx.getChild(1).getText()
             left = self.visit(ctx.regexp(0))
@@ -216,8 +230,9 @@ class TypeCheckVisitor(notgraphqlVisitor):
                 raise Exception("Unknown operation between regexps")
 
         elif ctx.getChildCount() == 3 and ctx.regexp(0):
-            assert ctx.getChild(0).getText() == "(" and ctx.getChild(2).getText() == ")", \
-                "Код, который делает мМmмММ?!"
+            assert (
+                ctx.getChild(0).getText() == "(" and ctx.getChild(2).getText() == ")"
+            ), "Код, который делает мМmмММ?!"
             return self.visit(ctx.regexp(0))
 
         raise Exception("Unknown regular expression type")
@@ -231,8 +246,6 @@ class TypeCheckVisitor(notgraphqlVisitor):
         # Было бы логично анализ на матч переменных вынести в отдельный visitor
         # Bсе таки это синтаксический анализ
         # Но сроки горят, жопа горит, все горит. Пока пишем так
-        def var_to_text(var):
-            return var.symbol.text
 
         vf1 = ctx.v_filter(0) if ctx.v_filter(0) else None
         vf2 = ctx.v_filter(1) if ctx.v_filter(1) else None
@@ -242,11 +255,11 @@ class TypeCheckVisitor(notgraphqlVisitor):
             5,
         ], f"If you see this message, The God abandoned this code"
 
-        local_context = set(map(var_to_text, ctx.VAR()[-3:-1]))
+        local_context = set(map(self.__var_to_text, ctx.VAR()[-3:-1]))
         if len(local_context) != 2:
             raise Exception(f"Cannot use same variable name: {list(local_context)[0]}")
 
-        graph_var = var_to_text(ctx.VAR()[-1])
+        graph_var = self.__var_to_text(ctx.VAR()[-1])
         typecheck(Type.GRAPH, self.context.lookup(graph_var))
 
         if graph_var in local_context:
@@ -256,12 +269,12 @@ class TypeCheckVisitor(notgraphqlVisitor):
             )
 
         if vf1:
-            var = var_to_text(vf1.VAR())
+            var = self.__var_to_text(vf1.VAR())
             if var not in local_context:
                 raise Exception(f"Unknown local variable '{var}'")
             self.visit(vf1)
         if vf2:
-            var = var_to_text(vf2.VAR())
+            var = self.__var_to_text(vf2.VAR())
             if var not in local_context:
                 raise Exception(f"Unknown local variable '{var}'")
             self.visit(vf2)
@@ -277,23 +290,23 @@ class TypeCheckVisitor(notgraphqlVisitor):
 
         match len(ctx.VAR()):
             case 4:
-                if len(set(map(var_to_text, ctx.VAR()))) > 3:
-                    var1 = var_to_text(ctx.VAR(0))
+                if len(set(map(self.__var_to_text, ctx.VAR()))) > 3:
+                    var1 = self.__var_to_text(ctx.VAR(0))
                     assert (
                         var1 not in local_context
                     ), "The type checker is wrong here, investigate"
                     raise Exception(f"Unknown local variable '{var1}'")
                 return Type.SET_INT
             case 5:
-                if len(set(map(var_to_text, ctx.VAR()))) > 3:
-                    var1 = var_to_text(ctx.VAR(0))
+                if len(set(map(self.__var_to_text, ctx.VAR()))) > 3:
+                    var1 = self.__var_to_text(ctx.VAR(0))
                     assert (
                         var1 not in local_context
                     ), "The type checker is wrong here, investigate"
                     if var1 not in local_context:
                         raise Exception(f"Unknown local variable '{var1}'")
 
-                    var2 = var_to_text(ctx.VAR(1))
+                    var2 = self.__var_to_text(ctx.VAR(1))
                     assert (
                         var2 not in local_context
                     ), "The type checker is wrong here, investigate"
